@@ -6,9 +6,10 @@ import { MapPin, Heart, Search } from "lucide-react"
 import { MapContainer } from "@/components/map/MapContainer"
 import { FilterPanel } from "@/components/filters/FilterPanel"
 import { SchoolCard } from "@/components/school/SchoolCard"
+import { RouteModal } from "@/components/school/RouteModal"
 import { useSchools } from "@/hooks/useSchools"
 import { useFilteredSchools, DEFAULT_FILTERS } from "@/hooks/useFilteredSchools"
-import type { Filters } from "@/hooks/useFilteredSchools"
+import type { Filters, SchoolWithDistance } from "@/hooks/useFilteredSchools"
 import { useFavorites } from "@/hooks/useFavorites"
 
 function HomeContent() {
@@ -19,6 +20,7 @@ function HomeContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [filterOpen, setFilterOpen] = useState(false)
   const [showList, setShowList] = useState(false)
+  const [routeSchool, setRouteSchool] = useState<SchoolWithDistance | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   // 選択された学校をリストでスクロール
@@ -39,6 +41,16 @@ function HomeContent() {
       </div>
     )
   }
+
+  const schoolCardProps = (s: SchoolWithDistance) => ({
+    school: s,
+    isSelected: s.study_id === selectedId,
+    isFavorite: isFavorite(s.study_id),
+    onFavoriteToggle: () => toggle(s.study_id),
+    originLat: filters.originLat,
+    originLng: filters.originLng,
+    onRouteSearch: filters.originLat != null ? (school: SchoolWithDistance) => setRouteSchool(school) : undefined,
+  })
 
   return (
     <div className="h-screen flex flex-col">
@@ -88,16 +100,10 @@ function HomeContent() {
             {filteredSchools.map((s) => (
               <div key={s.study_id} data-id={s.study_id}>
                 <SchoolCard
-                  school={s}
-                  isSelected={s.study_id === selectedId}
-                  isFavorite={isFavorite(s.study_id)}
+                  {...schoolCardProps(s)}
                   onSelect={() =>
                     setSelectedId(s.study_id === selectedId ? null : s.study_id)
                   }
-                  onFavoriteToggle={() => toggle(s.study_id)}
-                  originLat={filters.originLat}
-                  originLng={filters.originLng}
-                  originAddress={filters.originAddress}
                 />
               </div>
             ))}
@@ -140,18 +146,13 @@ function HomeContent() {
               {filteredSchools.map((s) => (
                 <div key={s.study_id} data-id={s.study_id}>
                   <SchoolCard
-                    school={s}
-                    isSelected={s.study_id === selectedId}
-                    isFavorite={isFavorite(s.study_id)}
+                    {...schoolCardProps(s)}
                     onSelect={() => {
                       setSelectedId(
                         s.study_id === selectedId ? null : s.study_id
                       )
                       setShowList(false)
                     }}
-                    onFavoriteToggle={() => toggle(s.study_id)}
-                    originLat={filters.originLat}
-                    originLng={filters.originLng}
                   />
                 </div>
               ))}
@@ -171,6 +172,17 @@ function HomeContent() {
           onToggle={() => setFilterOpen(!filterOpen)}
         />
       </div>
+
+      {/* ルート検索モーダル */}
+      {routeSchool && filters.originLat != null && filters.originLng != null && (
+        <RouteModal
+          school={routeSchool}
+          originLat={filters.originLat}
+          originLng={filters.originLng}
+          originAddress={filters.originAddress}
+          onClose={() => setRouteSchool(null)}
+        />
+      )}
     </div>
   )
 }
