@@ -11,7 +11,7 @@ export function useSchools() {
 
   useEffect(() => {
     if (cachedSchools) return
-    fetch("/data/schools.json")
+    fetch("/api/schools")
       .then((res) => res.json())
       .then((data: School[]) => {
         cachedSchools = data
