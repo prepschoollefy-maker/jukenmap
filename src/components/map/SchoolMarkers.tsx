@@ -13,11 +13,11 @@ interface Props {
   isFavorite: (id: string) => boolean
 }
 
-// 設立区分ごとのピン色（背景、枠、テキスト）
+// 校種ごとのピン色（背景、枠、テキスト）
 const PIN_STYLES: Record<string, { bg: string; border: string; glyph: string }> = {
-  "私立":       { bg: "#3B82F6", border: "#1D4ED8", glyph: "#DBEAFE" },
-  "国立":       { bg: "#EF4444", border: "#B91C1C", glyph: "#FEE2E2" },
-  "公立中高一貫": { bg: "#22C55E", border: "#15803D", glyph: "#DCFCE7" },
+  "男子校": { bg: "#3B82F6", border: "#1D4ED8", glyph: "#DBEAFE" },
+  "女子校": { bg: "#EF4444", border: "#B91C1C", glyph: "#FEE2E2" },
+  "共学校": { bg: "#22C55E", border: "#15803D", glyph: "#DCFCE7" },
 }
 
 export function SchoolMarkers({
@@ -47,7 +47,7 @@ export function SchoolMarkers({
   return (
     <>
       {validSchools.map((school) => {
-        const pinStyle = PIN_STYLES[school.establishment] || PIN_STYLES["私立"]
+        const pinStyle = PIN_STYLES[school.school_type] || PIN_STYLES["共学校"]
         const isSelected = school.study_id === selectedId
 
         return (
