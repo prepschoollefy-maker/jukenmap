@@ -71,17 +71,33 @@ export function SchoolCard({
 
     try {
       const service = new google.maps.DirectionsService()
+      // 次の月曜 8:00 を出発時刻に設定
       const now = new Date()
+      const dayOfWeek = now.getDay()
+      const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 7 : 8 - dayOfWeek
       const nextMonday = new Date(now)
-      nextMonday.setDate(now.getDate() + ((8 - now.getDay()) % 7 || 7))
+      nextMonday.setDate(now.getDate() + daysUntilMonday)
       nextMonday.setHours(8, 0, 0, 0)
 
-      const response = await service.route({
-        origin: new google.maps.LatLng(originLat!, originLng!),
-        destination: new google.maps.LatLng(school.latitude!, school.longitude!),
-        travelMode: google.maps.TravelMode.TRANSIT,
-        transitOptions: { departureTime: nextMonday },
-      })
+      const response = await new Promise<google.maps.DirectionsResult>(
+        (resolve, reject) => {
+          service.route(
+            {
+              origin: new google.maps.LatLng(originLat!, originLng!),
+              destination: new google.maps.LatLng(school.latitude!, school.longitude!),
+              travelMode: google.maps.TravelMode.TRANSIT,
+              transitOptions: { departureTime: nextMonday },
+            },
+            (result, status) => {
+              if (status === "OK" && result) {
+                resolve(result)
+              } else {
+                reject(new Error(status))
+              }
+            }
+          )
+        }
+      )
 
       const parsed = parseDirectionsResult(response)
       if (parsed) {
@@ -89,8 +105,15 @@ export function SchoolCard({
       } else {
         setRouteError("ルートが見つかりませんでした")
       }
-    } catch {
-      setRouteError("ルート検索に失敗しました")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "不明なエラー"
+      if (msg === "REQUEST_DENIED") {
+        setRouteError("Directions APIが無効です。Google Cloud Consoleで有効にしてください")
+      } else if (msg === "ZERO_RESULTS") {
+        setRouteError("公共交通機関のルートが見つかりませんでした")
+      } else {
+        setRouteError(`ルート検索に失敗しました (${msg})`)
+      }
     } finally {
       setRouteLoading(false)
     }
