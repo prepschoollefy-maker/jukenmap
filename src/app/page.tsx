@@ -10,7 +10,6 @@ import { useSchools } from "@/hooks/useSchools"
 import { useFilteredSchools, DEFAULT_FILTERS } from "@/hooks/useFilteredSchools"
 import type { Filters } from "@/hooks/useFilteredSchools"
 import { useFavorites } from "@/hooks/useFavorites"
-import { useTransitTimes } from "@/hooks/useTransitTimes"
 
 function HomeContent() {
   const { schools, loading } = useSchools()
@@ -21,10 +20,6 @@ function HomeContent() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [showList, setShowList] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
-
-  // 電車通学時間の計算
-  const { transitTimes, loading: transitLoading, progress: transitProgress } =
-    useTransitTimes(filters.originLat, filters.originLng, schools)
 
   // 選択された学校をリストでスクロール
   useEffect(() => {
@@ -84,8 +79,6 @@ function HomeContent() {
               totalCount={schools.length}
               isOpen={true}
               onToggle={() => {}}
-              transitLoading={transitLoading}
-              transitProgress={transitProgress}
             />
           </div>
           <div className="border-t flex-1 overflow-y-auto" ref={listRef}>
@@ -102,7 +95,8 @@ function HomeContent() {
                     setSelectedId(s.study_id === selectedId ? null : s.study_id)
                   }
                   onFavoriteToggle={() => toggle(s.study_id)}
-                  transitMinutes={transitTimes.get(s.study_id)?.durationMinutes ?? null}
+                  originLat={filters.originLat}
+                  originLng={filters.originLng}
                 />
               </div>
             ))}
@@ -155,7 +149,8 @@ function HomeContent() {
                       setShowList(false)
                     }}
                     onFavoriteToggle={() => toggle(s.study_id)}
-                    transitMinutes={transitTimes.get(s.study_id)?.durationMinutes ?? null}
+                    originLat={filters.originLat}
+                    originLng={filters.originLng}
                   />
                 </div>
               ))}
@@ -173,8 +168,6 @@ function HomeContent() {
           totalCount={schools.length}
           isOpen={filterOpen}
           onToggle={() => setFilterOpen(!filterOpen)}
-          transitLoading={transitLoading}
-          transitProgress={transitProgress}
         />
       </div>
     </div>
