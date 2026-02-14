@@ -133,17 +133,15 @@ export function SchoolMarkers({
             zIndex={isSelected ? 100 : 1}
           >
             <div
-              className="flex items-center justify-center rounded-full text-white text-[10px] font-bold shadow-md border-2 cursor-pointer transition-transform"
+              className="rounded-full shadow-md border-2 cursor-pointer transition-transform"
               style={{
                 backgroundColor: color,
                 borderColor: isSelected ? "#FBBF24" : "white",
-                width: isSelected ? 32 : 24,
-                height: isSelected ? 32 : 24,
+                width: isSelected ? 28 : 18,
+                height: isSelected ? 28 : 18,
                 transform: isSelected ? "scale(1.3)" : "scale(1)",
               }}
-            >
-              {school.yotsuya_deviation_value || ""}
-            </div>
+            />
           </AdvancedMarker>
         )
       })}
