@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useCallback } from "react"
 import { X, SlidersHorizontal, Navigation } from "lucide-react"
 import type { Establishment, SchoolType } from "@/types/school"
 import type { Filters } from "@/hooks/useFilteredSchools"
@@ -93,6 +93,32 @@ export function FilterPanel({
     filters.keyword !== "" ||
     hasOrigin
 
+  // Swipe-to-close (mobile only)
+  const touchStartY = useRef(0)
+  const [swipeOffset, setSwipeOffset] = useState(0)
+  const isDragging = useRef(false)
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartY.current = e.touches[0].clientY
+    isDragging.current = true
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!isDragging.current) return
+    const delta = e.touches[0].clientY - touchStartY.current
+    if (delta > 0) {
+      setSwipeOffset(delta)
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    isDragging.current = false
+    if (swipeOffset > 80) {
+      onToggle()
+    }
+    setSwipeOffset(0)
+  }, [swipeOffset, onToggle])
+
   const resetFilters = () => {
     setAddressInput("")
     setOriginLabel("")
@@ -141,7 +167,19 @@ export function FilterPanel({
         />
 
         {/* パネル本体 */}
-        <div className="absolute bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto bg-white rounded-t-2xl p-4 pb-8 lg:static lg:max-h-none lg:rounded-none lg:p-4 lg:border-r lg:h-full lg:overflow-y-auto">
+        <div
+          className="absolute bottom-0 left-0 right-0 max-h-[80vh] overflow-y-auto bg-white rounded-t-2xl p-4 pb-8 lg:static lg:max-h-none lg:rounded-none lg:p-4 lg:border-r lg:h-full lg:overflow-y-auto"
+          style={swipeOffset > 0 ? { transform: `translateY(${swipeOffset}px)`, transition: isDragging.current ? 'none' : 'transform 0.2s ease-out' } : undefined}
+        >
+          {/* ドラッグハンドル (mobile) */}
+          <div
+            className="lg:hidden flex justify-center pt-1 pb-3 cursor-grab"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div className="w-10 h-1 rounded-full bg-gray-300" />
+          </div>
           {/* ヘッダー */}
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-base">
