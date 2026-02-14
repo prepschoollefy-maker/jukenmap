@@ -8,6 +8,7 @@ import { ESTABLISHMENT_COLORS } from "@/lib/constants"
 interface RouteResult {
   totalMinutes: number
   totalText: string
+  mode: "transit" | "driving"
   steps: { mode: string; label: string; minutes: number }[]
 }
 
@@ -22,7 +23,8 @@ interface Props {
 }
 
 function parseDirectionsResult(
-  result: google.maps.DirectionsResult
+  result: google.maps.DirectionsResult,
+  mode: "transit" | "driving"
 ): RouteResult | null {
   const leg = result.routes[0]?.legs[0]
   if (!leg) return null
@@ -31,18 +33,48 @@ function parseDirectionsResult(
   const totalText = leg.duration!.text
 
   const steps: RouteResult["steps"] = []
-  for (const step of leg.steps) {
-    const minutes = Math.round(step.duration!.value / 60)
-    if (step.travel_mode === "WALKING") {
-      steps.push({ mode: "walk", label: `徒歩${minutes}分`, minutes })
-    } else if (step.travel_mode === "TRANSIT") {
-      const td = step.transit_details
-      const lineName = td?.line?.short_name || td?.line?.name || "電車"
-      steps.push({ mode: "transit", label: lineName, minutes })
+
+  if (mode === "transit") {
+    for (const step of leg.steps) {
+      const minutes = Math.round(step.duration!.value / 60)
+      const travelMode = step.travel_mode as unknown as string
+      if (travelMode === "WALKING" || travelMode === google.maps.TravelMode.WALKING) {
+        steps.push({ mode: "walk", label: `徒歩${minutes}分`, minutes })
+      } else if (travelMode === "TRANSIT" || travelMode === google.maps.TravelMode.TRANSIT) {
+        const td = step.transit_details
+        const lineName = td?.line?.short_name || td?.line?.name || "電車"
+        steps.push({ mode: "transit", label: lineName, minutes })
+      }
     }
   }
 
-  return { totalMinutes, totalText, steps }
+  return { totalMinutes, totalText, mode, steps }
+}
+
+function callDirections(
+  service: google.maps.DirectionsService,
+  origin: google.maps.LatLng,
+  destination: google.maps.LatLng,
+  travelMode: google.maps.TravelMode,
+  departureTime?: Date
+): Promise<google.maps.DirectionsResult> {
+  return new Promise((resolve, reject) => {
+    const request: google.maps.DirectionsRequest = {
+      origin,
+      destination,
+      travelMode,
+    }
+    if (travelMode === google.maps.TravelMode.TRANSIT && departureTime) {
+      request.transitOptions = { departureTime }
+    }
+    if (travelMode === google.maps.TravelMode.DRIVING) {
+      request.drivingOptions = { departureTime: departureTime || new Date() }
+    }
+    service.route(request, (result, status) => {
+      if (status === "OK" && result) resolve(result)
+      else reject(new Error(status))
+    })
+  })
 }
 
 export function SchoolCard({
@@ -69,37 +101,33 @@ export function SchoolCard({
     setRouteLoading(true)
     setRouteError("")
 
+    const service = new google.maps.DirectionsService()
+    const origin = new google.maps.LatLng(originLat!, originLng!)
+    const destination = new google.maps.LatLng(school.latitude!, school.longitude!)
+
     try {
-      const service = new google.maps.DirectionsService()
-      // 次の月曜 8:00 を出発時刻に設定
-      const now = new Date()
-      const dayOfWeek = now.getDay()
-      const daysUntilMonday = dayOfWeek === 0 ? 1 : dayOfWeek === 1 ? 7 : 8 - dayOfWeek
-      const nextMonday = new Date(now)
-      nextMonday.setDate(now.getDate() + daysUntilMonday)
-      nextMonday.setHours(8, 0, 0, 0)
-
-      const response = await new Promise<google.maps.DirectionsResult>(
-        (resolve, reject) => {
-          service.route(
-            {
-              origin: new google.maps.LatLng(originLat!, originLng!),
-              destination: new google.maps.LatLng(school.latitude!, school.longitude!),
-              travelMode: google.maps.TravelMode.TRANSIT,
-              transitOptions: { departureTime: nextMonday },
-            },
-            (result, status) => {
-              if (status === "OK" && result) {
-                resolve(result)
-              } else {
-                reject(new Error(status))
-              }
-            }
-          )
-        }
+      // まず電車（公共交通機関）で検索
+      const transitResult = await callDirections(
+        service, origin, destination,
+        google.maps.TravelMode.TRANSIT,
+        new Date()  // 現在時刻で検索
       )
+      const parsed = parseDirectionsResult(transitResult, "transit")
+      if (parsed) {
+        setRouteResult(parsed)
+        setRouteLoading(false)
+        return
+      }
+    } catch {
+      // 電車ルートが見つからない場合、車で検索
+    }
 
-      const parsed = parseDirectionsResult(response)
+    try {
+      const drivingResult = await callDirections(
+        service, origin, destination,
+        google.maps.TravelMode.DRIVING
+      )
+      const parsed = parseDirectionsResult(drivingResult, "driving")
       if (parsed) {
         setRouteResult(parsed)
       } else {
@@ -108,11 +136,9 @@ export function SchoolCard({
     } catch (err) {
       const msg = err instanceof Error ? err.message : "不明なエラー"
       if (msg === "REQUEST_DENIED") {
-        setRouteError("Directions APIが無効です。Google Cloud Consoleで有効にしてください")
-      } else if (msg === "ZERO_RESULTS") {
-        setRouteError("公共交通機関のルートが見つかりませんでした")
+        setRouteError("Directions APIを有効にしてください")
       } else {
-        setRouteError(`ルート検索に失敗しました (${msg})`)
+        setRouteError(`ルート検索に失敗 (${msg})`)
       }
     } finally {
       setRouteLoading(false)
@@ -165,7 +191,7 @@ export function SchoolCard({
           {/* ルート検索ボタン・結果 */}
           {hasOrigin && hasSchoolCoords && (
             <div className="mt-2">
-              {!routeResult && !routeLoading && (
+              {!routeResult && !routeLoading && !routeError && (
                 <button
                   onClick={searchRoute}
                   className="flex items-center gap-1 px-2 py-1 text-[11px] text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition-colors"
@@ -183,30 +209,49 @@ export function SchoolCard({
               )}
 
               {routeError && (
-                <p className="text-[11px] text-red-500">{routeError}</p>
+                <div>
+                  <p className="text-[11px] text-red-500">{routeError}</p>
+                  {googleMapsUrl && (
+                    <a
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 mt-1 text-[11px] text-blue-600 hover:underline"
+                    >
+                      Google Mapで確認する
+                      <ExternalLink size={10} />
+                    </a>
+                  )}
+                </div>
               )}
 
               {routeResult && (
                 <div className="bg-green-50 rounded p-2 text-[11px]">
                   <div className="font-bold text-green-800 text-sm">
-                    約{routeResult.totalMinutes}分
+                    {routeResult.mode === "transit" ? "🚃" : "🚗"} 約{routeResult.totalMinutes}分
                   </div>
-                  <div className="flex flex-wrap items-center gap-1 mt-1 text-gray-600">
-                    {routeResult.steps.map((step, i) => (
-                      <span key={i} className="flex items-center gap-0.5">
-                        {i > 0 && <span className="text-gray-300 mx-0.5">→</span>}
-                        <span
-                          className={
-                            step.mode === "transit"
-                              ? "bg-blue-100 text-blue-700 px-1 rounded"
-                              : ""
-                          }
-                        >
-                          {step.label}
+                  {routeResult.steps.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1 mt-1 text-gray-600">
+                      {routeResult.steps.map((step, i) => (
+                        <span key={i} className="flex items-center gap-0.5">
+                          {i > 0 && <span className="text-gray-300 mx-0.5">→</span>}
+                          <span
+                            className={
+                              step.mode === "transit"
+                                ? "bg-blue-100 text-blue-700 px-1 rounded"
+                                : ""
+                            }
+                          >
+                            {step.label}
+                          </span>
                         </span>
-                      </span>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
+                  {routeResult.mode === "driving" && (
+                    <p className="text-gray-500 mt-1">※電車ルートなし、車での所要時間</p>
+                  )}
                   {googleMapsUrl && (
                     <a
                       href={googleMapsUrl}
