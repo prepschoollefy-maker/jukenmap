@@ -129,11 +129,14 @@ export function SchoolCard({
       },
     ]
 
-    for (const request of attempts) {
+    const errors: string[] = []
+    const labels = ["翌朝8時出発", "翌朝9時到着", "現在時刻"]
+
+    for (let i = 0; i < attempts.length; i++) {
       try {
         const result = await new Promise<google.maps.DirectionsResult>(
           (resolve, reject) => {
-            service.route(request, (res, status) => {
+            service.route(attempts[i], (res, status) => {
               if (status === "OK" && res) resolve(res)
               else reject(new Error(status))
             })
@@ -145,12 +148,14 @@ export function SchoolCard({
           setRouteLoading(false)
           return
         }
-      } catch {
-        // 次のパターンで再試行
+        errors.push(`${labels[i]}: OK but no steps`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "unknown"
+        errors.push(`${labels[i]}: ${msg}`)
       }
     }
 
-    setRouteError("電車ルートを取得できませんでした")
+    setRouteError(`電車ルートを取得できませんでした (${errors.join(" / ")})`)
     setRouteLoading(false)
   }
 
