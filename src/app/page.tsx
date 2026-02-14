@@ -97,6 +97,7 @@ function HomeContent() {
                   onFavoriteToggle={() => toggle(s.study_id)}
                   originLat={filters.originLat}
                   originLng={filters.originLng}
+                  originAddress={filters.originAddress}
                 />
               </div>
             ))}

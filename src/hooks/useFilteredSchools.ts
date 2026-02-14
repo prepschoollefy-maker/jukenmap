@@ -13,6 +13,7 @@ export interface Filters {
   keyword: string
   originLat: number | null
   originLng: number | null
+  originAddress: string
   maxDistanceKm: number
 }
 
@@ -25,6 +26,7 @@ export const DEFAULT_FILTERS: Filters = {
   keyword: "",
   originLat: null,
   originLng: null,
+  originAddress: "",
   maxDistanceKm: 30,
 }
 

@@ -25,6 +25,7 @@ interface Props {
   onFavoriteToggle: () => void
   originLat?: number | null
   originLng?: number | null
+  originAddress?: string
 }
 
 function parseTransitResult(result: google.maps.DirectionsResult): RouteResult | null {
@@ -72,6 +73,7 @@ export function SchoolCard({
   onFavoriteToggle,
   originLat,
   originLng,
+  originAddress,
 }: Props) {
   const color = ESTABLISHMENT_COLORS[school.establishment] || "#6B7280"
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null)
@@ -97,40 +99,40 @@ export function SchoolCard({
     setRouteResult(null)
 
     const service = new google.maps.DirectionsService()
-    const origin = new google.maps.LatLng(originLat!, originLng!)
-    const destination = new google.maps.LatLng(school.latitude!, school.longitude!)
 
-    // 複数パターンで試す
+    // 住所文字列を使用（Googleが自前でジオコーディングしてルーティング）
+    const originStr = originAddress || `${originLat},${originLng}`
+    const destStr = school.address
+
     const tomorrow8am = new Date()
     tomorrow8am.setDate(tomorrow8am.getDate() + 1)
     tomorrow8am.setHours(8, 0, 0, 0)
 
-    const tomorrow9am = new Date()
-    tomorrow9am.setDate(tomorrow9am.getDate() + 1)
-    tomorrow9am.setHours(9, 0, 0, 0)
-
     const attempts: google.maps.DirectionsRequest[] = [
-      // 1. 翌朝8時出発
+      // 1. 住所文字列 + 翌朝8時出発
       {
-        origin, destination,
+        origin: originStr,
+        destination: destStr,
         travelMode: google.maps.TravelMode.TRANSIT,
         transitOptions: { departureTime: tomorrow8am },
       },
-      // 2. 翌朝9時到着
+      // 2. 住所文字列 + 現在時刻
       {
-        origin, destination,
+        origin: originStr,
+        destination: destStr,
         travelMode: google.maps.TravelMode.TRANSIT,
-        transitOptions: { arrivalTime: tomorrow9am },
       },
-      // 3. 現在時刻（デフォルト）
+      // 3. 座標 + 翌朝8時（フォールバック）
       {
-        origin, destination,
+        origin: new google.maps.LatLng(originLat!, originLng!),
+        destination: new google.maps.LatLng(school.latitude!, school.longitude!),
         travelMode: google.maps.TravelMode.TRANSIT,
+        transitOptions: { departureTime: tomorrow8am },
       },
     ]
 
     const errors: string[] = []
-    const labels = ["翌朝8時出発", "翌朝9時到着", "現在時刻"]
+    const labels = ["住所+翌朝", "住所+現在", "座標+翌朝"]
 
     for (let i = 0; i < attempts.length; i++) {
       try {

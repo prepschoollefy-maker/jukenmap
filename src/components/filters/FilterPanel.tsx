@@ -66,7 +66,7 @@ export function FilterPanel({
       if (data.length > 0) {
         const [lng, lat] = data[0].geometry.coordinates
         setOriginLabel(addressInput.trim())
-        onChange({ ...filters, originLat: lat, originLng: lng })
+        onChange({ ...filters, originLat: lat, originLng: lng, originAddress: addressInput.trim() })
       } else {
         setGeocodeError("住所が見つかりませんでした")
       }
@@ -81,7 +81,7 @@ export function FilterPanel({
     setAddressInput("")
     setOriginLabel("")
     setGeocodeError("")
-    onChange({ ...filters, originLat: null, originLng: null, maxDistanceKm: 30 })
+    onChange({ ...filters, originLat: null, originLng: null, originAddress: "", maxDistanceKm: 30 })
   }
 
   const hasActiveFilters =
@@ -106,6 +106,7 @@ export function FilterPanel({
       keyword: "",
       originLat: null,
       originLng: null,
+      originAddress: "",
       maxDistanceKm: 30,
     })
   }
