@@ -13,6 +13,8 @@ interface Props {
   totalCount: number
   isOpen: boolean
   onToggle: () => void
+  transitLoading?: boolean
+  transitProgress?: { done: number; total: number }
 }
 
 const ESTABLISHMENTS: Establishment[] = ["私立", "国立", "公立中高一貫"]
@@ -25,6 +27,8 @@ export function FilterPanel({
   totalCount,
   isOpen,
   onToggle,
+  transitLoading,
+  transitProgress,
 }: Props) {
   const toggleEstablishment = (e: Establishment) => {
     const next = filters.establishments.includes(e)
@@ -211,6 +215,17 @@ export function FilterPanel({
                   <span>1km</span>
                   <span>50km</span>
                 </div>
+                {transitLoading && transitProgress && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-green-700">
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-green-500 border-t-transparent" />
+                    電車時間を計算中... ({transitProgress.done}/{transitProgress.total})
+                  </div>
+                )}
+                {!transitLoading && hasOrigin && (
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    各学校カードに電車での所要時間が表示されます
+                  </p>
+                )}
               </div>
             ) : (
               <div>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { APIProvider } from "@vis.gl/react-google-maps"
 import { MapPin, Heart, Search } from "lucide-react"
 import { MapContainer } from "@/components/map/MapContainer"
 import { FilterPanel } from "@/components/filters/FilterPanel"
@@ -9,8 +10,9 @@ import { useSchools } from "@/hooks/useSchools"
 import { useFilteredSchools, DEFAULT_FILTERS } from "@/hooks/useFilteredSchools"
 import type { Filters } from "@/hooks/useFilteredSchools"
 import { useFavorites } from "@/hooks/useFavorites"
+import { useTransitTimes } from "@/hooks/useTransitTimes"
 
-export default function Home() {
+function HomeContent() {
   const { schools, loading } = useSchools()
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS)
   const filteredSchools = useFilteredSchools(schools, filters)
@@ -19,6 +21,10 @@ export default function Home() {
   const [filterOpen, setFilterOpen] = useState(false)
   const [showList, setShowList] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+
+  // 電車通学時間の計算
+  const { transitTimes, loading: transitLoading, progress: transitProgress } =
+    useTransitTimes(filters.originLat, filters.originLng, schools)
 
   // 選択された学校をリストでスクロール
   useEffect(() => {
@@ -78,6 +84,8 @@ export default function Home() {
               totalCount={schools.length}
               isOpen={true}
               onToggle={() => {}}
+              transitLoading={transitLoading}
+              transitProgress={transitProgress}
             />
           </div>
           <div className="border-t flex-1 overflow-y-auto" ref={listRef}>
@@ -94,6 +102,7 @@ export default function Home() {
                     setSelectedId(s.study_id === selectedId ? null : s.study_id)
                   }
                   onFavoriteToggle={() => toggle(s.study_id)}
+                  transitMinutes={transitTimes.get(s.study_id)?.durationMinutes ?? null}
                 />
               </div>
             ))}
@@ -146,6 +155,7 @@ export default function Home() {
                       setShowList(false)
                     }}
                     onFavoriteToggle={() => toggle(s.study_id)}
+                    transitMinutes={transitTimes.get(s.study_id)?.durationMinutes ?? null}
                   />
                 </div>
               ))}
@@ -163,8 +173,28 @@ export default function Home() {
           totalCount={schools.length}
           isOpen={filterOpen}
           onToggle={() => setFilterOpen(!filterOpen)}
+          transitLoading={transitLoading}
+          transitProgress={transitProgress}
         />
       </div>
     </div>
+  )
+}
+
+export default function Home() {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+
+  if (!apiKey) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-100 text-gray-500">
+        <p>Google Maps APIキーが設定されていません。.env.localを確認してください。</p>
+      </div>
+    )
+  }
+
+  return (
+    <APIProvider apiKey={apiKey}>
+      <HomeContent />
+    </APIProvider>
   )
 }

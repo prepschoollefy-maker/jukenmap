@@ -1,6 +1,6 @@
 "use client"
 
-import { Heart, MapPin } from "lucide-react"
+import { Heart, MapPin, Train } from "lucide-react"
 import type { SchoolWithDistance } from "@/hooks/useFilteredSchools"
 import { ESTABLISHMENT_COLORS } from "@/lib/constants"
 
@@ -10,6 +10,7 @@ interface Props {
   isFavorite: boolean
   onSelect: () => void
   onFavoriteToggle: () => void
+  transitMinutes?: number | null
 }
 
 export function SchoolCard({
@@ -18,6 +19,7 @@ export function SchoolCard({
   isFavorite,
   onSelect,
   onFavoriteToggle,
+  transitMinutes,
 }: Props) {
   const color = ESTABLISHMENT_COLORS[school.establishment] || "#6B7280"
 
@@ -47,12 +49,20 @@ export function SchoolCard({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 mt-1 text-[11px] text-gray-500">
-            <MapPin size={10} />
-            <span className="truncate">{school.area}</span>
+          <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-500">
+            <span className="flex items-center gap-0.5">
+              <MapPin size={10} />
+              {school.area}
+            </span>
             {school.distanceKm !== null && (
-              <span className="ml-1 text-blue-600 font-medium">
-                約{school.distanceKm.toFixed(1)}km
+              <span className="text-blue-600">
+                直線{school.distanceKm.toFixed(1)}km
+              </span>
+            )}
+            {transitMinutes != null && (
+              <span className="flex items-center gap-0.5 text-green-700 font-medium">
+                <Train size={10} />
+                {transitMinutes}分
               </span>
             )}
           </div>
