@@ -1,15 +1,19 @@
 "use client"
 
 import { useState } from "react"
-import { Heart, MapPin, Route, ExternalLink } from "lucide-react"
+import { Heart, MapPin, Route, X } from "lucide-react"
 import type { SchoolWithDistance } from "@/hooks/useFilteredSchools"
 import { ESTABLISHMENT_COLORS } from "@/lib/constants"
 
+interface RouteStep {
+  mode: string
+  label: string
+  minutes: number
+}
+
 interface RouteResult {
   totalMinutes: number
-  totalText: string
-  mode: "transit" | "driving"
-  steps: { mode: string; label: string; minutes: number }[]
+  steps: RouteStep[]
 }
 
 interface Props {
@@ -22,59 +26,34 @@ interface Props {
   originLng?: number | null
 }
 
-function parseDirectionsResult(
-  result: google.maps.DirectionsResult,
-  mode: "transit" | "driving"
-): RouteResult | null {
+function parseTransitResult(result: google.maps.DirectionsResult): RouteResult | null {
   const leg = result.routes[0]?.legs[0]
   if (!leg) return null
 
   const totalMinutes = Math.round(leg.duration!.value / 60)
-  const totalText = leg.duration!.text
+  const steps: RouteStep[] = []
 
-  const steps: RouteResult["steps"] = []
-
-  if (mode === "transit") {
-    for (const step of leg.steps) {
-      const minutes = Math.round(step.duration!.value / 60)
-      const travelMode = step.travel_mode as unknown as string
-      if (travelMode === "WALKING" || travelMode === google.maps.TravelMode.WALKING) {
-        steps.push({ mode: "walk", label: `徒歩${minutes}分`, minutes })
-      } else if (travelMode === "TRANSIT" || travelMode === google.maps.TravelMode.TRANSIT) {
-        const td = step.transit_details
-        const lineName = td?.line?.short_name || td?.line?.name || "電車"
-        steps.push({ mode: "transit", label: lineName, minutes })
-      }
+  for (const step of leg.steps) {
+    const minutes = Math.round(step.duration!.value / 60)
+    const travelMode = step.travel_mode as unknown as string
+    if (travelMode === "WALKING" || travelMode === google.maps.TravelMode.WALKING) {
+      steps.push({ mode: "walk", label: `徒歩${minutes}分`, minutes })
+    } else if (travelMode === "TRANSIT" || travelMode === google.maps.TravelMode.TRANSIT) {
+      const td = step.transit_details
+      const lineName = td?.line?.short_name || td?.line?.name || "電車"
+      steps.push({ mode: "transit", label: lineName, minutes })
     }
   }
 
-  return { totalMinutes, totalText, mode, steps }
+  return { totalMinutes, steps }
 }
 
-function callDirections(
-  service: google.maps.DirectionsService,
-  origin: google.maps.LatLng,
-  destination: google.maps.LatLng,
-  travelMode: google.maps.TravelMode,
-  departureTime?: Date
-): Promise<google.maps.DirectionsResult> {
-  return new Promise((resolve, reject) => {
-    const request: google.maps.DirectionsRequest = {
-      origin,
-      destination,
-      travelMode,
-    }
-    if (travelMode === google.maps.TravelMode.TRANSIT && departureTime) {
-      request.transitOptions = { departureTime }
-    }
-    if (travelMode === google.maps.TravelMode.DRIVING) {
-      request.drivingOptions = { departureTime: departureTime || new Date() }
-    }
-    service.route(request, (result, status) => {
-      if (status === "OK" && result) resolve(result)
-      else reject(new Error(status))
-    })
-  })
+// 翌朝8時のDateを返す
+function getTomorrowMorning(): Date {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  d.setHours(8, 0, 0, 0)
+  return d
 }
 
 export function SchoolCard({
@@ -88,67 +67,72 @@ export function SchoolCard({
 }: Props) {
   const color = ESTABLISHMENT_COLORS[school.establishment] || "#6B7280"
   const [routeResult, setRouteResult] = useState<RouteResult | null>(null)
+  const [showEmbed, setShowEmbed] = useState(false)
   const [routeLoading, setRouteLoading] = useState(false)
-  const [routeError, setRouteError] = useState("")
 
   const hasOrigin = originLat != null && originLng != null
   const hasSchoolCoords = school.latitude != null && school.longitude != null
 
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+
+  const embedUrl =
+    hasOrigin && hasSchoolCoords
+      ? `https://www.google.com/maps/embed/v1/directions?key=${apiKey}&origin=${originLat},${originLng}&destination=${school.latitude},${school.longitude}&mode=transit`
+      : null
+
   const searchRoute = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!hasOrigin || !hasSchoolCoords || !window.google?.maps) return
+    if (!hasOrigin || !hasSchoolCoords) return
 
+    setShowEmbed(true)
     setRouteLoading(true)
-    setRouteError("")
 
-    const service = new google.maps.DirectionsService()
-    const origin = new google.maps.LatLng(originLat!, originLng!)
-    const destination = new google.maps.LatLng(school.latitude!, school.longitude!)
+    // Directions APIでテキスト情報も取得を試みる
+    if (window.google?.maps) {
+      const service = new google.maps.DirectionsService()
+      const origin = new google.maps.LatLng(originLat!, originLng!)
+      const destination = new google.maps.LatLng(school.latitude!, school.longitude!)
 
-    try {
-      // まず電車（公共交通機関）で検索
-      const transitResult = await callDirections(
-        service, origin, destination,
-        google.maps.TravelMode.TRANSIT,
-        new Date()  // 現在時刻で検索
-      )
-      const parsed = parseDirectionsResult(transitResult, "transit")
-      if (parsed) {
-        setRouteResult(parsed)
-        setRouteLoading(false)
-        return
+      // 複数の出発時刻で試す（現在時刻 → 翌朝8時）
+      const departureTimes = [new Date(), getTomorrowMorning()]
+
+      for (const departureTime of departureTimes) {
+        try {
+          const result = await new Promise<google.maps.DirectionsResult>(
+            (resolve, reject) => {
+              service.route(
+                {
+                  origin,
+                  destination,
+                  travelMode: google.maps.TravelMode.TRANSIT,
+                  transitOptions: { departureTime },
+                },
+                (res, status) => {
+                  if (status === "OK" && res) resolve(res)
+                  else reject(new Error(status))
+                }
+              )
+            }
+          )
+          const parsed = parseTransitResult(result)
+          if (parsed) {
+            setRouteResult(parsed)
+            break
+          }
+        } catch {
+          // 次の出発時刻で再試行
+        }
       }
-    } catch {
-      // 電車ルートが見つからない場合、車で検索
     }
 
-    try {
-      const drivingResult = await callDirections(
-        service, origin, destination,
-        google.maps.TravelMode.DRIVING
-      )
-      const parsed = parseDirectionsResult(drivingResult, "driving")
-      if (parsed) {
-        setRouteResult(parsed)
-      } else {
-        setRouteError("ルートが見つかりませんでした")
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "不明なエラー"
-      if (msg === "REQUEST_DENIED") {
-        setRouteError("Directions APIを有効にしてください")
-      } else {
-        setRouteError(`ルート検索に失敗 (${msg})`)
-      }
-    } finally {
-      setRouteLoading(false)
-    }
+    setRouteLoading(false)
   }
 
-  const googleMapsUrl =
-    hasOrigin && hasSchoolCoords
-      ? `https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${school.latitude},${school.longitude}&travelmode=transit`
-      : null
+  const closeRoute = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    setShowEmbed(false)
+    setRouteResult(null)
+  }
 
   return (
     <div
@@ -188,10 +172,10 @@ export function SchoolCard({
             )}
           </div>
 
-          {/* ルート検索ボタン・結果 */}
+          {/* ルート検索 */}
           {hasOrigin && hasSchoolCoords && (
             <div className="mt-2">
-              {!routeResult && !routeLoading && !routeError && (
+              {!showEmbed && (
                 <button
                   onClick={searchRoute}
                   className="flex items-center gap-1 px-2 py-1 text-[11px] text-blue-600 border border-blue-300 rounded hover:bg-blue-50 transition-colors"
@@ -201,69 +185,63 @@ export function SchoolCard({
                 </button>
               )}
 
-              {routeLoading && (
-                <div className="flex items-center gap-1 text-[11px] text-gray-500">
-                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-400 border-t-transparent" />
-                  検索中...
-                </div>
-              )}
-
-              {routeError && (
-                <div>
-                  <p className="text-[11px] text-red-500">{routeError}</p>
-                  {googleMapsUrl && (
-                    <a
-                      href={googleMapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 mt-1 text-[11px] text-blue-600 hover:underline"
-                    >
-                      Google Mapで確認する
-                      <ExternalLink size={10} />
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {routeResult && (
-                <div className="bg-green-50 rounded p-2 text-[11px]">
-                  <div className="font-bold text-green-800 text-sm">
-                    {routeResult.mode === "transit" ? "🚃" : "🚗"} 約{routeResult.totalMinutes}分
-                  </div>
-                  {routeResult.steps.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-1 mt-1 text-gray-600">
-                      {routeResult.steps.map((step, i) => (
-                        <span key={i} className="flex items-center gap-0.5">
-                          {i > 0 && <span className="text-gray-300 mx-0.5">→</span>}
-                          <span
-                            className={
-                              step.mode === "transit"
-                                ? "bg-blue-100 text-blue-700 px-1 rounded"
-                                : ""
-                            }
-                          >
-                            {step.label}
-                          </span>
-                        </span>
-                      ))}
+              {showEmbed && (
+                <div className="mt-1" onClick={(e) => e.stopPropagation()}>
+                  {/* テキストサマリー */}
+                  {routeLoading && (
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500 mb-1">
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-400 border-t-transparent" />
+                      計算中...
                     </div>
                   )}
-                  {routeResult.mode === "driving" && (
-                    <p className="text-gray-500 mt-1">※電車ルートなし、車での所要時間</p>
+                  {routeResult && (
+                    <div className="bg-green-50 rounded p-2 text-[11px] mb-1">
+                      <div className="font-bold text-green-800 text-sm">
+                        約{routeResult.totalMinutes}分
+                      </div>
+                      {routeResult.steps.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1 mt-1 text-gray-600">
+                          {routeResult.steps.map((step, i) => (
+                            <span key={i} className="flex items-center gap-0.5">
+                              {i > 0 && <span className="text-gray-300 mx-0.5">→</span>}
+                              <span
+                                className={
+                                  step.mode === "transit"
+                                    ? "bg-blue-100 text-blue-700 px-1 rounded"
+                                    : ""
+                                }
+                              >
+                                {step.label}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
-                  {googleMapsUrl && (
-                    <a
-                      href={googleMapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 mt-1 text-blue-600 hover:underline"
-                    >
-                      Google Mapで詳細を見る
-                      <ExternalLink size={10} />
-                    </a>
+
+                  {/* 埋め込みGoogleマップ */}
+                  {embedUrl && (
+                    <div className="relative rounded overflow-hidden border">
+                      <iframe
+                        src={embedUrl}
+                        width="100%"
+                        height="250"
+                        style={{ border: 0 }}
+                        loading="lazy"
+                        allowFullScreen
+                        referrerPolicy="no-referrer-when-downgrade"
+                      />
+                    </div>
                   )}
+
+                  <button
+                    onClick={closeRoute}
+                    className="flex items-center gap-1 mt-1 text-[11px] text-gray-500 hover:text-gray-700"
+                  >
+                    <X size={10} />
+                    閉じる
+                  </button>
                 </div>
               )}
             </div>
