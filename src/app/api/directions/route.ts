@@ -8,7 +8,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "origin and destination required" }, { status: 400 })
   }
 
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+  // サーバー用キー（リファラ制限なし）を優先、なければブラウザ用キーにフォールバック
+  const apiKey = process.env.GOOGLE_MAPS_SERVER_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
   if (!apiKey) {
     return NextResponse.json({ error: "API key not configured" }, { status: 500 })
   }
@@ -29,11 +30,7 @@ export async function GET(req: NextRequest) {
   url.searchParams.set("departure_time", String(Math.floor(tomorrow8am.getTime() / 1000)))
 
   try {
-    const res = await fetch(url.toString(), {
-      headers: {
-        Referer: "https://jukenmap.vercel.app/",
-      },
-    })
+    const res = await fetch(url.toString())
     const data = await res.json()
     return NextResponse.json(data)
   } catch (err) {
