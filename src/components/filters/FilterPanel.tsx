@@ -1,6 +1,7 @@
 "use client"
 
-import { X, SlidersHorizontal } from "lucide-react"
+import { useState } from "react"
+import { X, SlidersHorizontal, Navigation } from "lucide-react"
 import type { Establishment, SchoolType } from "@/types/school"
 import type { Filters } from "@/hooks/useFilteredSchools"
 import { DEVIATION_MIN, DEVIATION_MAX, AREAS } from "@/lib/constants"
@@ -46,15 +47,56 @@ export function FilterPanel({
     onChange({ ...filters, areas: next })
   }
 
+  const [addressInput, setAddressInput] = useState("")
+  const [geocoding, setGeocoding] = useState(false)
+  const [geocodeError, setGeocodeError] = useState("")
+  const [originLabel, setOriginLabel] = useState("")
+
+  const hasOrigin = filters.originLat !== null && filters.originLng !== null
+
+  const geocodeAddress = async () => {
+    if (!addressInput.trim()) return
+    setGeocoding(true)
+    setGeocodeError("")
+    try {
+      const res = await fetch(
+        `https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(addressInput.trim())}`
+      )
+      const data = await res.json()
+      if (data.length > 0) {
+        const [lng, lat] = data[0].geometry.coordinates
+        setOriginLabel(addressInput.trim())
+        onChange({ ...filters, originLat: lat, originLng: lng })
+      } else {
+        setGeocodeError("住所が見つかりませんでした")
+      }
+    } catch {
+      setGeocodeError("住所の検索に失敗しました")
+    } finally {
+      setGeocoding(false)
+    }
+  }
+
+  const clearOrigin = () => {
+    setAddressInput("")
+    setOriginLabel("")
+    setGeocodeError("")
+    onChange({ ...filters, originLat: null, originLng: null, maxDistanceKm: 30 })
+  }
+
   const hasActiveFilters =
     filters.establishments.length > 0 ||
     filters.schoolTypes.length > 0 ||
     filters.areas.length > 0 ||
     filters.deviationMin > DEVIATION_MIN ||
     filters.deviationMax < DEVIATION_MAX ||
-    filters.keyword !== ""
+    filters.keyword !== "" ||
+    hasOrigin
 
   const resetFilters = () => {
+    setAddressInput("")
+    setOriginLabel("")
+    setGeocodeError("")
     onChange({
       establishments: [],
       schoolTypes: [],
@@ -62,6 +104,9 @@ export function FilterPanel({
       deviationMax: DEVIATION_MAX,
       areas: [],
       keyword: "",
+      originLat: null,
+      originLng: null,
+      maxDistanceKm: 30,
     })
   }
 
@@ -128,6 +173,71 @@ export function FilterPanel({
               onChange={(e) => onChange({ ...filters, keyword: e.target.value })}
               className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
             />
+          </div>
+
+          {/* 通学距離 */}
+          <div className="mb-4">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2">
+              <Navigation size={12} className="inline mr-1" />
+              自宅からの距離
+            </h3>
+            {hasOrigin ? (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-700 truncate flex-1">
+                    {originLabel}
+                  </span>
+                  <button
+                    onClick={clearOrigin}
+                    className="text-xs text-red-500 hover:underline ml-2 shrink-0"
+                  >
+                    解除
+                  </button>
+                </div>
+                <h3 className="text-xs text-gray-500 mb-1">
+                  {filters.maxDistanceKm}km以内
+                </h3>
+                <input
+                  type="range"
+                  min={1}
+                  max={50}
+                  value={filters.maxDistanceKm}
+                  onChange={(e) =>
+                    onChange({ ...filters, maxDistanceKm: Number(e.target.value) })
+                  }
+                  className="w-full accent-blue-500"
+                />
+                <div className="flex justify-between text-[10px] text-gray-400">
+                  <span>1km</span>
+                  <span>50km</span>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    placeholder="自宅の住所・駅名を入力..."
+                    value={addressInput}
+                    onChange={(e) => setAddressInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") geocodeAddress()
+                    }}
+                    className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                  />
+                  <button
+                    onClick={geocodeAddress}
+                    disabled={geocoding || !addressInput.trim()}
+                    className="px-3 py-2 bg-blue-500 text-white text-sm rounded-lg hover:bg-blue-600 disabled:opacity-50 shrink-0"
+                  >
+                    {geocoding ? "..." : "検索"}
+                  </button>
+                </div>
+                {geocodeError && (
+                  <p className="text-xs text-red-500 mt-1">{geocodeError}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 設置区分 */}

@@ -9,7 +9,9 @@ export default function FavoritesPage() {
   const { schools, loading } = useSchools()
   const { favorites, toggle, isFavorite } = useFavorites()
 
-  const favoriteSchools = schools.filter((s) => favorites.has(s.study_id))
+  const favoriteSchools = schools
+    .filter((s) => favorites.has(s.study_id))
+    .map((s) => ({ ...s, distanceKm: null as number | null }))
 
   return (
     <div className="min-h-screen bg-gray-50">

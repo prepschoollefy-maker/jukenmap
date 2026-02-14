@@ -1,11 +1,11 @@
 "use client"
 
 import { Heart, MapPin } from "lucide-react"
-import type { School } from "@/types/school"
+import type { SchoolWithDistance } from "@/hooks/useFilteredSchools"
 import { ESTABLISHMENT_COLORS } from "@/lib/constants"
 
 interface Props {
-  school: School
+  school: SchoolWithDistance
   isSelected: boolean
   isFavorite: boolean
   onSelect: () => void
@@ -50,6 +50,11 @@ export function SchoolCard({
           <div className="flex items-center gap-1 mt-1 text-[11px] text-gray-500">
             <MapPin size={10} />
             <span className="truncate">{school.area}</span>
+            {school.distanceKm !== null && (
+              <span className="ml-1 text-blue-600 font-medium">
+                約{school.distanceKm.toFixed(1)}km
+              </span>
+            )}
           </div>
         </div>
         <button
