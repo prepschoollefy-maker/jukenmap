@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useState, useEffect } from "react"
-import { AdvancedMarker, useMap, InfoWindow } from "@vis.gl/react-google-maps"
+import { AdvancedMarker, Pin, useMap, InfoWindow } from "@vis.gl/react-google-maps"
 import Supercluster from "supercluster"
 import type { School } from "@/types/school"
 import { ESTABLISHMENT_COLORS } from "@/lib/constants"
@@ -17,6 +17,13 @@ interface Props {
 
 type SchoolPoint = Supercluster.PointFeature<{ school: School }>
 
+// 設立区分ごとのピン色（背景、枠、テキスト）
+const PIN_STYLES: Record<string, { bg: string; border: string; glyph: string }> = {
+  "私立":       { bg: "#3B82F6", border: "#1D4ED8", glyph: "#DBEAFE" },
+  "国立":       { bg: "#EF4444", border: "#B91C1C", glyph: "#FEE2E2" },
+  "公立中高一貫": { bg: "#22C55E", border: "#15803D", glyph: "#DCFCE7" },
+}
+
 export function SchoolMarkers({
   schools,
   selectedId,
@@ -28,7 +35,6 @@ export function SchoolMarkers({
   const [bounds, setBounds] = useState<[number, number, number, number] | null>(null)
   const [zoom, setZoom] = useState(10)
 
-  // マップのboundsとzoomを追跡
   useEffect(() => {
     if (!map) return
     const listener = () => {
@@ -45,12 +51,10 @@ export function SchoolMarkers({
       }
     }
     map.addListener("idle", listener)
-    // 初回
     listener()
     return () => google.maps.event.clearListeners(map, "idle")
   }, [map])
 
-  // Superclusterインスタンス
   const cluster = useMemo(() => {
     const sc = new Supercluster<{ school: School }>({
       radius: 60,
@@ -70,7 +74,6 @@ export function SchoolMarkers({
     return sc
   }, [schools])
 
-  // クラスターを取得
   const clusters = useMemo(() => {
     if (!bounds) return []
     return cluster.getClusters(bounds, zoom)
@@ -97,7 +100,7 @@ export function SchoolMarkers({
 
         if (isCluster) {
           const count = props.point_count as number
-          const size = Math.min(24 + count * 0.5, 48)
+          const size = Math.min(36 + count * 0.8, 56)
           return (
             <AdvancedMarker
               key={`cluster-${c.id}`}
@@ -111,8 +114,9 @@ export function SchoolMarkers({
               }}
             >
               <div
-                className="flex items-center justify-center rounded-full bg-blue-500 text-white font-bold shadow-lg border-2 border-white cursor-pointer"
-                style={{ width: size, height: size, fontSize: size * 0.35 }}
+                className="flex items-center justify-center rounded-full bg-slate-600 text-white font-bold shadow-lg border-3 border-white cursor-pointer hover:scale-110 transition-transform"
+                style={{ width: size, height: size, fontSize: size * 0.38 }}
+                title={`${count}校がこのエリアにあります`}
               >
                 {count}
               </div>
@@ -120,9 +124,9 @@ export function SchoolMarkers({
           )
         }
 
-        // 個別マーカー
+        // 個別マーカー: Google標準のピン形状
         const school = (props as { school: School }).school
-        const color = ESTABLISHMENT_COLORS[school.establishment] || "#6B7280"
+        const pinStyle = PIN_STYLES[school.establishment] || PIN_STYLES["私立"]
         const isSelected = school.study_id === selectedId
 
         return (
@@ -131,16 +135,13 @@ export function SchoolMarkers({
             position={{ lat, lng }}
             onClick={() => handleMarkerClick(school.study_id)}
             zIndex={isSelected ? 100 : 1}
+            title={school.school_name}
           >
-            <div
-              className="rounded-full shadow-md border-2 cursor-pointer transition-transform"
-              style={{
-                backgroundColor: color,
-                borderColor: isSelected ? "#FBBF24" : "white",
-                width: isSelected ? 28 : 18,
-                height: isSelected ? 28 : 18,
-                transform: isSelected ? "scale(1.3)" : "scale(1)",
-              }}
+            <Pin
+              background={isSelected ? "#FBBF24" : pinStyle.bg}
+              borderColor={isSelected ? "#D97706" : pinStyle.border}
+              glyphColor={isSelected ? "#78350F" : pinStyle.glyph}
+              scale={isSelected ? 1.4 : 1.0}
             />
           </AdvancedMarker>
         )
@@ -153,7 +154,7 @@ export function SchoolMarkers({
             lng: selectedSchool.longitude,
           }}
           onCloseClick={() => onSelect(null)}
-          pixelOffset={[0, -20]}
+          pixelOffset={[0, -36]}
         >
           <SchoolInfoWindow
             school={selectedSchool}
